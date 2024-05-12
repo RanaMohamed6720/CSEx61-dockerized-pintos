@@ -96,7 +96,8 @@ struct thread
     int exit_error;                     /* Index indicate the exit state */
     struct semaphore child_lock;
     int waiting_on;                     /* Which child is he waiting on*/
-
+    struct list file_list;              /* List for open files by that thread*/
+    int next_fd;                    
     /* Shared between thread.c and synch.c. */
     struct list_elem elem;              /* List element. */
 
@@ -114,6 +115,12 @@ struct child_proc {
    struct list_elem elem;
    int exit_error;
    bool used;
+};
+
+struct file_elem {                      
+   int fd;
+   struct file* file;
+   struct list_elem elem;
 };
 
 /* If false (default), use round-robin scheduler.

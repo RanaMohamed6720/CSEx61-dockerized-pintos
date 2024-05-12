@@ -9,8 +9,6 @@
 // what is left ?
 /*
   check validity of each pointer
-  add list of files open by each process
-  find the file open with each process using fd
   add page fault handling (exit with status -1)
 */
 static struct lock file_lock;
@@ -142,24 +140,32 @@ bool remove(const char *file)
 }
 int open(const char *file)
 {
-
   lock_acquire(&file_lock);
   struct file *f = filesys_open(file);
-
+  lock_release(&file_lock);
   if (f == NULL)
     return -1;
-  else
-    return 0; // should return fd
 
-  lock_release(&file_lock);
+  // add file to the file list(open files) of the thread
+  struct file_elem *elem = malloc(sizeof(struct file_elem));
+  elem->file = f;
+  int fd = thread_current()->next_fd;
+  elem->fd = fd;
+  thread_current()->next_fd++;
+  list_insert(&thread_current()->file_list, &elem->elem);
+
+  return fd;
 }
 int filesize(int fd)
 {
-  // check page fault here
-
+  // find the file that fd releate to
+  struct file *file = get_file(fd);
+  if (file == NULL)
+    return -1;
   lock_acquire(&file_lock);
-  return file_length(fd);
+  int size = file_length(file);
   lock_release(&file_lock);
+  return size;
 }
 int read(int fd, void *buffer, unsigned size)
 {
@@ -176,8 +182,9 @@ int read(int fd, void *buffer, unsigned size)
   else
   {
     // find the file that fd releate to
-    struct file *file;
-    // check page fault
+    struct file *file = get_file(fd);
+    if (file == NULL)
+      return -1;
     lock_acquire(&file_lock);
     size_read = file_read(file, buffer, size);
     lock_release(&file_lock);
@@ -186,10 +193,7 @@ int read(int fd, void *buffer, unsigned size)
 }
 int write(int fd, void *buffer, unsigned size)
 {
-  // find the file that fd releate to
-  struct file *file;
   int write_size;
-  // check page fault
   if (fd == 1)
   {
     lock_acquire(&file_lock);
@@ -199,6 +203,10 @@ int write(int fd, void *buffer, unsigned size)
   }
   else
   {
+    // find the file that fd releate to
+    struct file *file = get_file(fd);
+    if (file == NULL)
+      return -1;
     lock_acquire(&file_lock);
     write_size = file_write(file, &buffer, size);
     lock_release(&file_lock);
@@ -208,8 +216,9 @@ int write(int fd, void *buffer, unsigned size)
 void seek(int fd, unsigned position)
 {
   // find the file that fd releate to
-  struct file *file;
-  // check page fault
+  struct file *file = get_file(fd);
+  if (file == NULL)
+    return;
   lock_acquire(&file_lock);
   file_seek(fd, position);
   lock_release(&file_lock);
@@ -217,8 +226,9 @@ void seek(int fd, unsigned position)
 unsigned tell(int fd)
 {
   // find the file that fd releate to
-  struct file *file;
-  // check page fault
+  struct file *file = get_file(fd);
+  if (file == NULL)
+    return -1;
   lock_acquire(&file_lock);
   file_tell(file);
   lock_release(&file_lock);
@@ -226,12 +236,44 @@ unsigned tell(int fd)
 void close(int fd)
 {
   // find the file that fd releate to
-  struct file *file;
-  // check page fault
+  struct file *file = get_file(fd);
+  if (file == NULL)
+    return;
   lock_acquire(&file_lock);
   file_close(file);
   lock_release(&file_lock);
-  // remove that fd from file list
+
+  // remove that file from file list(open files)
+  remove_file(fd);
+}
+struct file *get_file(int fd)
+{
+  struct list_elem *e;
+
+  struct thread *cur = thread_current();
+  for (e = list_begin(&cur->file_list); e != list_end(&cur->file_list);
+       e = list_next(e))
+  {
+    struct file_elem *f = list_entry(e, struct file_elem, elem);
+    if (f->fd == fd)
+      return f->file;
+  }
+  return NULL; // if we don't found that file
+}
+void remove_file(int fd)
+{
+  struct list_elem *e;
+
+  struct thread *cur = thread_current();
+  for (e = list_begin(&cur->file_list); e != list_end(&cur->file_list);
+       e = list_next(e))
+  {
+    struct file_elem *f = list_entry(e, struct file_elem, elem);
+    if (f->fd == fd)
+    { 
+      list_remove(&f->elem);
+    }
+  }
 }
 struct child_proc *find_child_proc(int pid)
 {
