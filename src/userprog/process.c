@@ -17,6 +17,7 @@
 #include "threads/palloc.h"
 #include "threads/thread.h"
 #include "threads/vaddr.h"
+#include "userprog/syscall.h"
 
 static thread_func start_process NO_RETURN;
 static bool load (const char *cmdline, void (**eip) (void), void **esp);
@@ -86,14 +87,21 @@ start_process (void *file_name_)
    This function will be implemented in problem 2-2.  For now, it
    does nothing. */
 int
-process_wait (tid_t child_tid UNUSED) 
+process_wait (tid_t child_tid) 
 {
-  // REPLACE THAT PART OF CODE (TEMPORARY PART TO WORK IN PARALLEL)
-  while(true){
-    thread_yield();
-  }
-  // // // // // // // // // // // // // // // // // // // // // //
-  return -1;
+  struct child_proc* child = find_child_proc(child_tid);
+
+  if (!child) return -1;
+
+  thread_current()->waiting_on = child->pid;
+
+  if(!child->used)
+    sema_down(&thread_current()->child_lock);
+
+  int temp = child->exit_error;
+  list_remove(&child->elem);
+
+  return temp;
 }
 
 /* Free the current process's resources. */

@@ -8,6 +8,7 @@
 #include "threads/interrupt.h"
 #include "threads/intr-stubs.h"
 #include "threads/palloc.h"
+#include "threads/malloc.h"
 #include "threads/switch.h"
 #include "threads/synch.h"
 #include "threads/vaddr.h"
@@ -182,6 +183,12 @@ thread_create (const char *name, int priority,
   /* Initialize thread. */
   init_thread (t, name, priority);
   tid = t->tid = allocate_tid ();
+
+  struct child_proc* cp = malloc(sizeof(struct child_proc));
+  cp->pid = tid;
+  cp->exit_error = t->exit_error;
+  cp->used = false;
+  list_push_back(&thread_current()->child_list, &cp->elem);
 
   /* Stack frame for kernel_thread(). */
   kf = alloc_frame (t, sizeof *kf);
@@ -463,6 +470,10 @@ init_thread (struct thread *t, const char *name, int priority)
   t->stack = (uint8_t *) t + PGSIZE;
   t->priority = priority;
   t->magic = THREAD_MAGIC;
+  t->exit_error = -100;
+  t->waiting_on=0;
+  list_init(&t->child_list);
+  sema_init(&t->child_lock,0);
 
   old_level = intr_disable ();
   list_push_back (&all_list, &t->allelem);

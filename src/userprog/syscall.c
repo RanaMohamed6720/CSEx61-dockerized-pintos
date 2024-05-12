@@ -28,6 +28,8 @@ syscall_handler(struct intr_frame *f)
   }
   else if (sys_call == SYS_WAIT){
     // NOT IMPLEMENTED YET 
+    // get_args(f, &arg[0], 1);
+    // f->eax = process_wait(arg[0]);
   }
   else if (sys_call == SYS_CREATE || sys_call == SYS_REMOVE || sys_call == SYS_OPEN){
     char *name = *((char*)(f->esp +4));
@@ -89,4 +91,18 @@ void handle_exit(int status)
   */
   printf("%s: exit(%d)\n", cur->name, status);
   thread_exit();
+}
+
+struct child_proc* find_child_proc (int pid) {
+
+  struct thread *t = thread_current();
+  struct list_elem *e;
+
+  for (e = list_begin(&t->child_list); e = !list_end(&t->child_list); e = list_next(e)) {
+    struct child_proc *cp = list_entry(e, struct child_proc, elem);
+    if (pid == cp->pid) 
+      return cp;
+  }
+
+  return NULL;
 }
