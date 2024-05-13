@@ -3,28 +3,32 @@
 #include <syscall-nr.h>
 #include "threads/interrupt.h"
 #include "threads/thread.h"
+#include "userprog/process.h"
 #include "threads/malloc.h"
 #include "filesys/filesys.h"
 #include "filesys/file.h"
+#include "userprog/pagedir.h"
+#include "threads/vaddr.h"
 #include "lib/kernel/stdio.h"
 
 static struct lock file_lock;
 
 static void syscall_handler(struct intr_frame *);
 void handle_halt();
-void handle_exit(int status);
-bool create(const char *file, unsigned initial_size);
-struct child_proc *find_child_proc(int pid);
 void close(int fd);
-unsigned tell(int fd);
-void seek(int fd, unsigned position);
-int write(int fd, void *buffer, unsigned size);
-int read(int fd, void *buffer, unsigned size);
 int filesize(int fd);
+unsigned tell(int fd);
+void remove_file(int fd);
+struct file *get_file(int fd);
 int open(const char *file);
 bool remove(const char *file);
-struct file *get_file(int fd);
-void remove_file(int fd);
+void handle_exit(int status);
+void seek(int fd, unsigned position);
+bool create(const char *file, unsigned initial_size);
+int write(int fd, void *buffer, unsigned size);
+int read(int fd, void *buffer, unsigned size);
+struct child_proc *find_child_proc(int pid);
+void* check_ref_valid (void *address);
 
 void syscall_init(void)
 {

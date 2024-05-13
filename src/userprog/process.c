@@ -117,9 +117,9 @@ process_exit (void)
   int exit_code = cur->exit_error;
   printf("%s: exit(%d)\n",cur->name,exit_code);
 
-  acquire_filesys_lock();
-  close_all_files(&thread_current()->file_list);
-  release_filesys_lock();
+  // acquire_filesys_lock();
+  // close_all_files(&thread_current()->file_list);
+  // release_filesys_lock();
 
   /* Destroy the current process's page directory and switch back
      to the kernel-only page directory. */
