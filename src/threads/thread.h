@@ -96,6 +96,8 @@ struct thread
     int exit_error;                     /* Index indicate the exit state */
     struct semaphore child_lock;
     int waiting_on;                     /* Which child is he waiting on*/
+    struct thread* parent;              /* Parent of the current thread */
+
     struct list file_list;              /* List for open files by that thread*/
     int next_fd;                    
     /* Shared between thread.c and synch.c. */
@@ -111,7 +113,7 @@ struct thread
   };
 
 struct child_proc {
-   int pid;
+   int pid;                             /* Child's id */
    struct list_elem elem;
    int exit_error;
    bool used;

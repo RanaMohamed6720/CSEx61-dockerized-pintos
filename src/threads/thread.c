@@ -183,7 +183,9 @@ thread_create (const char *name, int priority,
   /* Initialize thread. */
   init_thread (t, name, priority);
   tid = t->tid = allocate_tid ();
+  t->parent = thread_current();
 
+  /* Adding the created thread to its parent's list of children */
   struct child_proc* cp = malloc(sizeof(struct child_proc));
   cp->pid = tid;
   cp->exit_error = t->exit_error;
@@ -292,6 +294,11 @@ thread_exit (void)
 #ifdef USERPROG
   process_exit ();
 #endif
+
+  while(!list_empty(&thread_current()->child_list)){
+    struct child_proc *c = list_entry (list_pop_front(&thread_current()->child_list), struct child_proc, elem);
+    free(c);
+  }
 
   /* Remove thread from all threads list, set our status to dying,
      and schedule another process.  That process will destroy us
@@ -471,7 +478,8 @@ init_thread (struct thread *t, const char *name, int priority)
   t->priority = priority;
   t->magic = THREAD_MAGIC;
   t->exit_error = -100;
-  t->waiting_on=0;
+  t->waiting_on = 0;
+  t->parent = -1;
   list_init(&t->child_list);
   sema_init(&t->child_lock,0);
 

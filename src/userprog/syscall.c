@@ -35,39 +35,50 @@ static void
 syscall_handler(struct intr_frame *f)
 {
   uint32_t *args = ((uint32_t *)f->esp);
+  check_ref_valid(args);
+  if (*args < 0 || *args > 12){
+    handle_exit(-1);
+  }
+
   if (args[0] == SYS_HALT)
   {
     handle_halt();
   }
   else if (args[0] == SYS_EXIT)
   {
-    f->eax = args[1];
-    handle_exit(args[1]);
+    check_ref_valid(args[1]);
+    handle_exit(*(args+1));
   }
   else if (args[0] == SYS_EXEC)
   {
+    // check_ref_valid(args[1]);
+    // check_ref_valid(*(args+1));
     // NOT IMPLEMENTED YET
   }
   else if (args[0] == SYS_WAIT)
   {
-    // NOT IMPLEMENTED YET
-    // get_args(f, &arg[0], 1);
-    // f->eax = process_wait(arg[0]);
+    check_ref_valid(args[1]);
+    f->eax = process_wait(*(args+1));
   }
   else if (args[0] == SYS_CREATE || args[0] == SYS_REMOVE || args[0] == SYS_OPEN)
   {
     char *name = args[1];
     if (args[0] == SYS_CREATE)
     {
+      check_ref_valid(*(args+1));
       int initial_size = args[2];
       f->eax = create(name, initial_size);
     }
     else if (args[0] == SYS_REMOVE)
     {
+      check_ref_valid(args[1]);
+      check_ref_valid(*(args+1));
       f->eax = remove(name);
     }
     else if (args[0] == SYS_OPEN)
     {
+      check_ref_valid(args[1]);
+      check_ref_valid(*(args+1));
       f->eax = open(name);
     }
   }
@@ -76,23 +87,29 @@ syscall_handler(struct intr_frame *f)
     int fd = args[1];
     if (args[0] == SYS_FILESIZE)
     {
+      check_ref_valid(args[1]);
       f->eax = filesize(fd);
     }
     else if (args[0] == SYS_SEEK)
     {
+      check_ref_valid(args[2]);
       unsigned new_pos = args[2];
       seek(fd, new_pos);
     }
     else if (args[0] == SYS_TELL)
     {
+      check_ref_valid(args[1]);
       f->eax = tell(fd);
     }
     else if (args[0] == SYS_CLOSE)
     {
+      check_ref_valid(args[1]);
       close(fd);
     }
     else
     {
+      check_ref_valid(args[2]);
+      check_ref_valid(*(args+3));
       void *buffer = args[2];
       int size = args[3];
       if (args[0] == SYS_READ)
@@ -107,19 +124,51 @@ syscall_handler(struct intr_frame *f)
   }
   thread_exit();
 }
+
+void* check_ref_valid (void *address) {
+  if (!is_user_vaddr(address))
+	{
+		handle_exit(-1);
+		return 0;
+	}
+  void *ptr = pagedir_get_page(thread_current()->pagedir, address);
+	if (!ptr)
+	{
+		handle_exit(-1);
+		return 0;
+	}
+	return ptr;
+}
+
 void handle_halt()
 {
   shutdown_power_off();
 }
+
 void handle_exit(int status)
 {
   struct thread *cur = thread_current();
-  /*
-    terminate all sub processes of current process HERE and release all resources
-  */
+  struct list_elem *e;
+
+  for (e=list_begin(&cur->parent->child_list); e!=list_end(&cur->parent->child_list); e=list_next(e))
+  {
+    struct child_proc *c = list_entry(e, struct child_proc, elem);
+    if (c->pid == cur->tid){
+      c->used = true;
+      c->exit_error = status;
+    }
+  }
+  
+  cur->exit_error = status;
+
+  if (cur->parent->waiting_on == cur->tid) {
+    sema_up(&cur->parent->child_lock);
+  }
+
   printf("%s: exit(%d)\n", cur->name, status);
   thread_exit();
 }
+
 bool create(const char *file, unsigned initial_size)
 {
 
