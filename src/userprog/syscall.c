@@ -10,11 +10,11 @@
 #include "userprog/pagedir.h"
 #include "threads/vaddr.h"
 #include "lib/kernel/stdio.h"
-
-static struct lock file_lock;
+#include "devices/shutdown.h"
+#include "devices/input.h"
 
 static void syscall_handler(struct intr_frame *);
-void handle_halt();
+void handle_halt(void);
 void close(int fd);
 int filesize(int fd);
 unsigned tell(int fd);
@@ -29,10 +29,12 @@ int write(int fd, void *buffer, unsigned size);
 int read(int fd, void *buffer, unsigned size);
 struct child_proc *find_child_proc(int pid);
 void* check_ref_valid (void *address);
+static void syscall_handler(struct intr_frame *f);
 
 void syscall_init(void)
 {
   intr_register_int(0x30, 3, INTR_ON, syscall_handler, "syscall");
+  lock_init(&file_lock);
 }
 
 static void
@@ -40,7 +42,7 @@ syscall_handler(struct intr_frame *f)
 {
   uint32_t *args = ((uint32_t *)f->esp);
   check_ref_valid(args);
-  if (*args < 0 || *args > 12){
+  if (*args > 12){
     handle_exit(-1);
   }
 
@@ -50,7 +52,7 @@ syscall_handler(struct intr_frame *f)
   }
   else if (args[0] == SYS_EXIT)
   {
-    check_ref_valid(args[1]);
+    check_ref_valid(args+1);
     handle_exit(*(args+1));
   }
   else if (args[0] == SYS_EXEC)
@@ -61,28 +63,28 @@ syscall_handler(struct intr_frame *f)
   }
   else if (args[0] == SYS_WAIT)
   {
-    check_ref_valid(args[1]);
+    check_ref_valid(args+1);
     f->eax = process_wait(*(args+1));
   }
   else if (args[0] == SYS_CREATE || args[0] == SYS_REMOVE || args[0] == SYS_OPEN)
   {
-    char *name = args[1];
+    char *name = (char*) args[1];
     if (args[0] == SYS_CREATE)
     {
-      check_ref_valid(*(args+1));
+      check_ref_valid((void*)*(args+1));
       int initial_size = args[2];
       f->eax = create(name, initial_size);
     }
     else if (args[0] == SYS_REMOVE)
     {
-      check_ref_valid(args[1]);
-      check_ref_valid(*(args+1));
+      check_ref_valid(args+1);
+      check_ref_valid((void*)*(args+1));
       f->eax = remove(name);
     }
     else if (args[0] == SYS_OPEN)
     {
-      check_ref_valid(args[1]);
-      check_ref_valid(*(args+1));
+      check_ref_valid(args+1);
+      check_ref_valid((void*)*(args+1));
       f->eax = open(name);
     }
   }
@@ -91,30 +93,30 @@ syscall_handler(struct intr_frame *f)
     int fd = args[1];
     if (args[0] == SYS_FILESIZE)
     {
-      check_ref_valid(args[1]);
+      check_ref_valid(args+1);
       f->eax = filesize(fd);
     }
     else if (args[0] == SYS_SEEK)
     {
-      check_ref_valid(args[2]);
+      check_ref_valid(args+2);
       unsigned new_pos = args[2];
       seek(fd, new_pos);
     }
     else if (args[0] == SYS_TELL)
     {
-      check_ref_valid(args[1]);
+      check_ref_valid(args+1);
       f->eax = tell(fd);
     }
     else if (args[0] == SYS_CLOSE)
     {
-      check_ref_valid(args[1]);
+      check_ref_valid(args+1);
       close(fd);
     }
     else
     {
-      check_ref_valid(args[2]);
-      check_ref_valid(*(args+3));
-      void *buffer = args[2];
+      check_ref_valid(args+2);
+      check_ref_valid((void*)*(args+3));
+      void *buffer = (void*) args[2];
       int size = args[3];
       if (args[0] == SYS_READ)
       {
@@ -234,7 +236,7 @@ int read(int fd, void *buffer, unsigned size)
   }
   else
   {
-    // find the file that fd releate to
+    // find the file that fd relate to
     struct file *file = get_file(fd);
     if (file == NULL)
       return -1;
@@ -278,13 +280,14 @@ void seek(int fd, unsigned position)
 }
 unsigned tell(int fd)
 {
-  // find the file that fd releate to
+  // find the file that fd relate to
   struct file *file = get_file(fd);
   if (file == NULL)
     return -1;
   lock_acquire(&file_lock);
-  file_tell(file);
+  int pos = file_tell(file);
   lock_release(&file_lock);
+  return pos;
 }
 void close(int fd)
 {
@@ -334,7 +337,7 @@ struct child_proc *find_child_proc(int pid)
   struct thread *t = thread_current();
   struct list_elem *e;
 
-  for (e = list_begin(&t->child_list); e = !list_end(&t->child_list); e = list_next(e))
+  for (e = list_begin(&t->child_list); e != list_end(&t->child_list); e = list_next(e))
   {
     struct child_proc *cp = list_entry(e, struct child_proc, elem);
     if (pid == cp->pid)

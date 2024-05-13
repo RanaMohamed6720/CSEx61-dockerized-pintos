@@ -18,6 +18,7 @@
 #include "threads/thread.h"
 #include "threads/vaddr.h"
 #include "userprog/syscall.h"
+#include "threads/malloc.h"
 
 static thread_func start_process NO_RETURN;
 static bool load (const char *cmdline, void (**eip) (void), void **esp);
@@ -117,9 +118,20 @@ process_exit (void)
   int exit_code = cur->exit_error;
   printf("%s: exit(%d)\n",cur->name,exit_code);
 
-  // acquire_filesys_lock();
-  // close_all_files(&thread_current()->file_list);
-  // release_filesys_lock();
+  lock_acquire(&file_lock);
+
+  struct list_elem *e;
+  struct list *files = &thread_current()->file_list;
+	while(!list_empty(files))
+	{
+		e = list_pop_front(files);
+		struct file_elem *f = list_entry (e, struct file_elem, elem);
+    file_close(f->file);
+    list_remove(e);
+    free(f);
+	}
+
+  lock_release(&file_lock);
 
   /* Destroy the current process's page directory and switch back
      to the kernel-only page directory. */
