@@ -3,14 +3,11 @@
 #include <syscall-nr.h>
 #include "threads/interrupt.h"
 #include "threads/thread.h"
+#include "threads/malloc.h"
 #include "filesys/filesys.h"
 #include "filesys/file.h"
 #include "lib/kernel/stdio.h"
-// what is left ?
-/*
-  check validity of each pointer
-  add page fault handling (exit with status -1)
-*/
+
 static struct lock file_lock;
 
 static void syscall_handler(struct intr_frame *);
@@ -26,6 +23,9 @@ int read(int fd, void *buffer, unsigned size);
 int filesize(int fd);
 int open(const char *file);
 bool remove(const char *file);
+struct file *get_file(int fd);
+void remove_file(int fd);
+
 void syscall_init(void)
 {
   intr_register_int(0x30, 3, INTR_ON, syscall_handler, "syscall");
@@ -201,7 +201,7 @@ int open(const char *file)
   int fd = thread_current()->next_fd;
   elem->fd = fd;
   thread_current()->next_fd++;
-  list_insert(&thread_current()->file_list, &elem->elem);
+  list_push_back(&thread_current()->file_list, &elem->elem);
 
   return fd;
 }
@@ -269,7 +269,7 @@ void seek(int fd, unsigned position)
   if (file == NULL)
     return;
   lock_acquire(&file_lock);
-  file_seek(fd, position);
+  file_seek(file, position);
   lock_release(&file_lock);
 }
 unsigned tell(int fd)
