@@ -126,6 +126,7 @@ process_exit (void)
 	{
 		e = list_pop_front(files);
 		struct file_elem *f = list_entry (e, struct file_elem, elem);
+    file_allow_write(f->file);
     file_close(f->file);
     list_remove(e);
     free(f);
@@ -344,10 +345,11 @@ load (const char *file_name, void (**eip) (void), void **esp)
   *eip = (void (*) (void)) ehdr.e_entry;
 
   success = true;
-
+  file_deny_write(file);
+  
  done:
   /* We arrive here whether the load is successful or not. */
-  file_close (file);
+  // file_close (file);
   return success;
 }
 
